@@ -1,6 +1,7 @@
 import os
 import sys
 
+
 def test_test(name):
     class Logger(object):
         def __init__(self, filename="Default.log"):
@@ -21,3 +22,11 @@ def test_test(name):
     print(path)
     print(os.path.dirname(__file__))
     print('------------------')
+
+def plot(data):
+    x = np.arange(len(data))
+    fig = plt.plot(x, data, 'r--')
+    plt.ylabel('cumulative reward')
+    plt.xlabel('episode')
+    plt.legend()
+    plt.show()

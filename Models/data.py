@@ -13,10 +13,12 @@ class DataSet(object):
     def next_batch(self, batch_size):
         if batch_size > self._num_examples or batch_size <= 0:
             batch_size = self._dynamic_features.shape[0]
+
         if self._batch_completed == 0:
             self._shuffle()
         self._batch_completed += 1
         start = self._index_in_epoch
+
         if start + batch_size >= self._num_examples:
             self._epoch_completed += 1
             dynamic_rest_part = self._dynamic_features[start:self._num_examples]
