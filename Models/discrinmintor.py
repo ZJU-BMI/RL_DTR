@@ -22,7 +22,7 @@ class Discriminator(Model):
         states, rewards, actions = data
         batch = tf.shape(states)[0]
         discriminator_probability = tf.zeros(shape=[batch, 0, 1])
-        for step in range(self.predicted_visit):
+        for step in range(self.predicted_visit-1):
             state = states[:, step, :]
             action = actions[:, step, :]
             reward = rewards[:, step, :]
