@@ -1,5 +1,6 @@
 from data import *
 from Environment import *
+from Reward import *
 from utilis import *
 from bayes_opt import BayesianOptimization
 from basic_rl import Agent, Discriminator
@@ -82,23 +83,25 @@ def train():
 def train_batch(hidden_size, learning_rate, l2_regularization):
     train_set = np.load('..\\..\\RL_DTR\\Resource\\preprocess\\train_PLA.npy')[:, :, 1:]  # 去掉当前天数这个变量---->40个变量
     test_set = np.load('..\\..\\RL_DTR\\Resource\\preprocess\\test_PLA.npy')[:, :, 1:]
+    test_set.astype(np.float32)
     batch_size = 2018
-    feature_size = train_set.shape[2]-1
+    # batch_size = 64
+    feature_size = 35
     train_set = DataSet(train_set)
-    epochs = 2000
+    epochs = 200
     actor_size = 65
     previous_visit = 3
     predicted_visit = 7
 
     hidden_size = 2 ** int(hidden_size)
     learning_rate = 10 ** learning_rate
-    l2_regularization = 10 ** (l2_regularization)
+    l2_regularization = 10 ** l2_regularization
     # imbalance_1 = 10 ** int(imbalance_1)
     # imbalance_2 = 10 ** int(imbalance_2)
     gamma = 0.99
     imbalance_1 = 10
     imbalance_2 = 20
-    action_list = [0, 0.035714286, 0.0625, 0.071428571, 0.125, 0.1875, 0.25, 0.285714286, 0.3125, 0.321428571,
+    action_list = [0, 0.0357142873108387, 0.0625, 0.071428571, 0.125, 0.1875, 0.25, 0.2857142984867096, 0.3125, 0.321428571,
                    0.375, 0.4375, 0.446428571, 0.5, 0.5625, 0.625, 0.6875, 0.75, 0.875, 1,
                    1.125, 1.25, 1.375, 1.5, 1.55, 1.625, 1.75, 1.875, 2, 2.125,
                    2.25, 2.5, 2.75, 3, 3.125, 3.25, 3.375, 3.5, 3.75, 4,
@@ -109,12 +112,19 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
           .format(hidden_size, gamma, imbalance_1, imbalance_2, learning_rate))
 
     construct_environment = ReconstructEnvir(hidden_size=64,
-                                             feature_dims=39,
+                                             feature_dims=35,
                                              previous_visit=3)
-    construct_environment(tf.ones(shape=[3, 4, 40]))
-    construct_environment.load_weights('environment_3_7_39_9_15.h5')
+    construct_environment(tf.ones(shape=[3, 4, feature_size+1]))
+    construct_environment.load_weights('environment_3_7_39_9_17.h5')
 
-    agent = Agent(actor_size=actor_size, hidden_size=hidden_size, gamma=gamma, learning_rate=learning_rate)
+    reward_net = Reward(hidden_size=32, output_size=2)
+    reward_net([tf.ones(shape=[3, feature_size]), tf.ones(shape=[3, 1])])
+    reward_net.load_weights('reward_9_17.h5')
+
+    agent = Agent(actor_size=actor_size, hidden_size=32, gamma=gamma, learning_rate=learning_rate)
+    agent.act(tf.ones(shape=[3, feature_size]))
+    agent.model.load_weights('policy_net_9_18.h5')
+
     discriminator = Discriminator(hidden_size=hidden_size, feature_dims=feature_size, predicted_visit=predicted_visit)
     cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
     discriminator_optimizer = tf.keras.optimizers.RMSprop(learning_rate=learning_rate)
@@ -129,37 +139,42 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
         actions = tf.zeros(shape=[batch, 0, 1])
         actions_index = tf.zeros(shape=[batch, 0, 1])
 
-        real_states = input_x_train[:, previous_visit:previous_visit+predicted_visit, 1:]
-        real_actions = input_x_train[:, previous_visit:previous_visit+predicted_visit, 0].reshape(batch, -1, 1)
+        real_states = input_x_train[:, previous_visit:previous_visit+predicted_visit-1, 5:]
+        real_actions = input_x_train[:, previous_visit:previous_visit+predicted_visit-1, 0].reshape(batch, -1, 1)
         real_rewards = tf.zeros(shape=[batch, 0, 1])
 
         for step in range(predicted_visit-1):
-            next_state_real = input_x_train[:, step+previous_visit+1, 1:]
-            real_reward = tf.nn.softsign(next_state_real[:, 0] - next_state_real[:, 1])*imbalance_1
-            initital_state_real = input_x_train[:, step+previous_visit, 1:]
+            # next_state_real = input_x_train[:, step+previous_visit+1, 5:]  # 35个变量
+            real_reward = (input_x_train[:, step+previous_visit+1, 1] - input_x_train[:, step+previous_visit+1, 2])*imbalance_1  # 净出量
+            # initital_state_real = input_x_train[:, step+previous_visit, 5:]
+
             if step == 0:
                 real_rewards = tf.concat((real_rewards, tf.reshape(real_reward, [batch, -1, 1])), axis=1)
-                initial_state = input_x_train[:, step + previous_visit, 1:]
-                state_to_now_ = input_x_train[:, :step + previous_visit, :]
-                action_index = tf.reshape(agent.act(initial_state), [batch, -1])
+                initial_state = input_x_train[:, step + previous_visit, 5:]
+                state_to_now_feature = input_x_train[:, :step + previous_visit, 5:]
+                state_to_now_action = input_x_train[:, :step+previous_visit, 0]
+                state_to_now_ = tf.concat((state_to_now_feature, tf.reshape(state_to_now_action, [batch, -1, 1])), axis=2)  # state和action进行拼接
+                action_index = tf.reshape(agent.act(initial_state), [batch, -1])  # 选择一个action
                 actions_index = tf.concat((actions_index, tf.reshape(action_index, [batch, -1, 1])), axis=1)
                 action_value = np.zeros_like(action_index)
                 for i in range(tf.shape(action_index)[0]):
                     for j in range(tf.shape(action_index)[1]):
                         action_value[i, j] = action_list[action_index[i, j]]
-                state_action = tf.concat((initial_state.reshape(batch, 1, -1), tf.reshape(action_value, [batch, -1, 1])), axis=2)
+                state_action = tf.concat((initial_state.reshape(batch, 1, -1), tf.reshape(action_value, [batch, -1, 1])), axis=2)  # 当前时刻的state action
                 state_to_now = tf.concat((state_to_now_, state_action), axis=1)
                 next_state = construct_environment(state_to_now)
 
                 states = tf.concat((states, initial_state.reshape(batch, -1, feature_size)), axis=1)
                 actions = tf.concat((actions, tf.reshape(action_value, [batch, -1, 1])), axis=1)
 
-                reward = tf.nn.softsign(next_state[:, 0] - next_state[:, 1]) * imbalance_1  # 新状态的出入量差值
+                reward = reward_net([initial_state, action_value])[:, 0] * imbalance_1  # 新状态的出入量差值
                 rewards = tf.concat((rewards, tf.reshape(reward, [batch, -1, 1])), axis=1)
 
             else:
                 initial_state = initial_state
-                state_to_now_ = input_x_train[:, :previous_visit, :]
+                state_to_now_feature = input_x_train[:, :previous_visit, 5:]
+                state_to_now_action = input_x_train[:, :previous_visit, 0]
+                state_to_now_ = tf.concat((state_to_now_feature, tf.reshape(state_to_now_action, [batch, -1, 1])), axis=2)  # 最开始的初识状态
                 state = next_state
                 action_index = agent.act(state)
                 actions_index = tf.concat((actions_index, tf.reshape(action_index, [batch, -1, 1])), axis=1)
@@ -167,18 +182,17 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
                 for i in range(tf.shape(action_index)[0]):
                     for j in range(tf.shape(action_index)[1]):
                         action_value[i, j] = action_list[action_index[i, j]]
-                state_action = tf.concat((tf.reshape(state, [batch, -1, feature_size]), tf.reshape(action_value, [batch, -1, 1])), axis=2)
-                state_to_now__ = tf.concat((states, actions), axis=2)
+                state_action = tf.concat((tf.reshape(state, [batch, -1, feature_size]), tf.reshape(action_value, [batch, -1, 1])), axis=2) # 当前时刻的state action
+                state_to_now__ = tf.concat((states, actions), axis=2)  # 已经产生过的state action
                 state_to_now = tf.concat((state_to_now_, state_to_now__, state_action), axis=1)
                 next_state = construct_environment(state_to_now)
 
                 states = tf.concat((states, tf.reshape(state, [batch, -1, feature_size])), axis=1)
                 actions = tf.concat((actions, tf.reshape(action_value, [batch, -1, 1])), axis=1)
-                reward = tf.nn.softsign(next_state[:, 0] - next_state[:, 1]) * imbalance_1
-
-                if step == predicted_visit-2:
-                    reward += (initial_state[:, 3] - next_state[:, 3]) * imbalance_2
-                    real_reward += (initital_state_real[:, 3]-next_state_real[:, 3]) * imbalance_2
+                reward = reward_net([state, action_value])[:, 0] * imbalance_1
+                # if step == predicted_visit-2:
+                #     reward += (initial_state[:, 3] - next_state[:, 3]) * imbalance_2
+                #     real_reward += (initital_state_real[:, 3]-next_state_real[:, 3]) * imbalance_2  # 仅仅考虑出入量，未考虑BNP
                 rewards = tf.concat((rewards, tf.reshape(reward, [batch, -1, 1])), axis=1)
             real_rewards = tf.concat((real_rewards, tf.reshape(real_reward, [batch, -1, 1])), axis=1)
         loss = agent.train(states=states, actions=actions_index, rewards=rewards)
@@ -205,42 +219,48 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
             actions_test = tf.zeros(shape=[batch_test, 0, 1])
 
             for step in range(predicted_visit):
-                initial_state_test = test_set[:, step+previous_visit, 1:]
-                state_to_now_test_ = test_set[:, :step + previous_visit, :]
+                initial_state_test_feature = test_set[:, step+previous_visit, 5:]
+                # initial_state_test_action = test_set[:, step+previous_visit, 0]
+                # initial_state_test = tf.concat((initial_state_test_feature, tf.reshape(initial_state_test_action, [batch_test, -1, 1])), axis=2)  # 当前时刻的state action
+
+                state_to_now_test_feature = test_set[:, :previous_visit, 5:]
+                state_to_now_test_action = test_set[:, :previous_visit, 0]
+                state_to_now_test_ = tf.concat((state_to_now_test_feature, tf.reshape(state_to_now_test_action, [batch_test, -1, 1])), axis=2)  # 之前时刻的state action
+                state_to_now_test_ = tf.cast(state_to_now_test_, tf.float32)
                 if step == 0:
-                    state_test = tf.cast(initial_state_test, tf.float32)
+                    state_test = tf.cast(initial_state_test_feature, tf.float32)
                     action_test_index = agent.act(state_test)
                     action_test_value = np.zeros_like(action_test_index)
                     for i in range(tf.shape(action_test_index)[0]):
                         for j in range(tf.shape(action_test_index)[1]):
                             action_test_value[i, j] = action_list[action_test_index[i, j]]
-                    state_action_test = tf.concat((tf.reshape(state_test, [batch_test, -1, feature_size]), tf.reshape(action_test_value, [batch_test, -1, 1])), axis=2)
+                    state_action_test = tf.concat((tf.reshape(state_test, [batch_test, -1, feature_size]), tf.reshape(action_test_value, [batch_test, -1, 1])), axis=2)  # 当前时刻选择的state action 拼接
 
                     state_to_now_test = tf.concat((state_to_now_test_, state_action_test), axis=1)
                     next_state_test = construct_environment(state_to_now_test)
-                    reward_test = tf.nn.softsign(next_state_test[:, 0] - next_state_test[:, 1]) * imbalance_1
+                    # reward_test = tf.nn.softsign(next_state_test[:, 0] - next_state_test[:, 1]) * imbalance_1
+                    reward_test = reward_net([state_test, action_test_value])[:, 0] * imbalance_1
 
                     rewards_test = tf.concat((rewards_test, tf.reshape(reward_test, [batch_test, 1, 1])), axis=1)
                     states_test = tf.concat((states_test, tf.reshape(state_test, [batch_test, -1, feature_size])), axis=1)
                     actions_test = tf.concat((actions_test, tf.reshape(action_test_value, [batch_test, -1, 1])), axis=1)
 
                 else:
-                    state_test = next_state_test
-                    action_test_index = agent.act(state_test)
+                    state_test = next_state_test   # 当前时刻的state
+                    action_test_index = agent.act(state_test)  # 选择新的action
                     action_test_value = np.zeros_like(action_test_index)
                     for i in range(tf.shape(action_test_index)[0]):
                         for j in range(tf.shape(action_test_index)[1]):
                             action_test_value[i, j] = action_list[action_test_index[i, j]]
-                    state_action_test = tf.concat((tf.reshape(state_test, [batch_test, -1, feature_size]), tf.reshape(action_test_value, [batch_test, -1, 1])), axis=2)
-                    state_to_now_test__ = tf.concat((states_test, actions_test), axis=2)
+                    state_action_test = tf.concat((tf.reshape(state_test, [batch_test, -1, feature_size]), tf.reshape(action_test_value, [batch_test, -1, 1])), axis=2)  # 当前时刻的state action
+                    state_to_now_test__ = tf.concat((states_test, actions_test), axis=2)  # 已经保存的state action
 
                     state_to_now_test = tf.concat((state_to_now_test_, state_to_now_test__, state_action_test), axis=1)
                     next_state_test = construct_environment(state_to_now_test)
-                    reward_test = tf.nn.softsign(next_state_test[:, 0] - next_state_test[:, 1]) * imbalance_1
-
-                    if step == predicted_visit-1:
-                        reward_test += (initial_state_test[:, 3] - next_state_test[:, 3]) * imbalance_2
-
+                    # reward_test = tf.nn.softsign(next_state_test[:, 0] - next_state_test[:, 1]) * imbalance_1
+                    reward_test = (reward_net([state_test, action_test_value])[:, 0]) * imbalance_1
+                    # if step == predicted_visit-1:
+                    #     reward_test += (initial_state_test[:, 3] - next_state_test[:, 3]) * imbalance_2
                     rewards_test = tf.concat((rewards_test, tf.reshape(reward_test, [batch_test, -1, 1])), axis=1)
                     states_test = tf.concat((states_test, tf.reshape(state_test, [batch_test, -1, feature_size])), axis=1)
                     actions_test = tf.concat((actions_test, tf.reshape(action_test_value, [batch_test, -1, 1])), axis=1)

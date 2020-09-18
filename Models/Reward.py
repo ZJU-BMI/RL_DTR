@@ -35,9 +35,9 @@ def pre_train_reward_net(hidden_size, learning_rate, l2_regularization):
 
     output_size = 2
 
-    hidden_size = 2 ** int(hidden_size)
-    learning_rate = 10 ** learning_rate
-    l2_regularization = 10 ** l2_regularization
+    # hidden_size = 2 ** int(hidden_size)
+    # learning_rate = 10 ** learning_rate
+    # l2_regularization = 10 ** l2_regularization
     epochs = 50
     batch_size = 64
     previous_visit = 3
@@ -106,21 +106,27 @@ def pre_train_reward_net(hidden_size, learning_rate, l2_regularization):
                 print('epoch---{}---train_loss--{}---test_loss---{}---count---{}'.format(train_set.epoch_completed,
                                                                                          loss, test_loss,
                                                                                          count))
+
+                if test_loss < 0.01200:
+                    reward_net.save_weights('reward_9_17.h5')
     tf.compat.v1.reset_default_graph()
-    return -test_loss
+    # return -test_loss
 
 
 if __name__ == '__main__':
     test_test('Reward_net预训练_9_17.txt')
-    Reward_net_BO = BayesianOptimization(
-        pre_train_reward_net, {
-            'hidden_size': (5, 8),
-            'learning_rate': (-5, -1),
-            'l2_regularization': (-5, -1),
-        }
-    )
-    Reward_net_BO.maximize()
-    print(Reward_net_BO.max)
+    # Reward_net_BO = BayesianOptimization(
+    #     pre_train_reward_net, {
+    #         'hidden_size': (5, 8),
+    #         'learning_rate': (-5, -1),
+    #         'l2_regularization': (-5, -1),
+    #     }
+    # )
+    # Reward_net_BO.maximize()
+    # print(Reward_net_BO.max)
+
+    for i in range(50):
+        pre_train_reward_net(hidden_size=32, learning_rate=0.0002361746704730307, l2_regularization=0.0002509883922487462)
 
 
 

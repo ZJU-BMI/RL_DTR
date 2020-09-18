@@ -121,7 +121,7 @@ def pre_train_policy(hidden_size, learning_rate):
         with tf.GradientTape() as tape:
             action_probs = tf.zeros(shape=[batch, 0, actor_size])
             for step in range(predicted_visit-1):
-                state = input_x_train[:, step+previous_visit, 1:]
+                state = input_x_train[:, step+previous_visit, 5:]
                 action_prob = policy_net(state)
                 action_probs = tf.concat((action_probs, tf.reshape(action_prob, [batch, -1, actor_size])), axis=1)
             loss = tf.keras.losses.sparse_categorical_crossentropy(tf.reshape(action_labels, [-1,]), tf.reshape(action_probs, [-1,actor_size]), from_logits=False)
@@ -140,7 +140,7 @@ def pre_train_policy(hidden_size, learning_rate):
                     for j in range(predicted_actions.shape[1]):
                         predicted_lables[i, j] = action_list.index(predicted_actions[i, j])
                 for step in range(predicted_visit-1):
-                    state_predict = test_set[:, step+previous_visit, 1:]
+                    state_predict = test_set[:, step+previous_visit, 5:]
                     action_pred = policy_net(state_predict)
                     predicted_probs = tf.concat((predicted_probs, tf.reshape(action_pred, [batch_test, -1, actor_size])), axis=1)
 
@@ -149,15 +149,15 @@ def pre_train_policy(hidden_size, learning_rate):
                                                                                    np.mean(loss),
                                                                                    np.mean(predicted_loss)))
                 if np.mean(predicted_loss) < 1.800:
-                    policy_net.save_weights('policy_bet_9_17.h5')
+                    policy_net.save_weights('policy_bet_9_18.h5')
 
     tf.compat.v1.reset_default_graph()
-    # return np.mean(predicted_loss)
+    # return -np.mean(predicted_loss)
 
 
 # 对policy网络进行预训练
 if __name__ == '__main__':
-    test_test('9_17_预训练actor网络.txt')
+    test_test('9_18_预训练actor网络——保存参数.txt')
     # Agent_BO = BayesianOptimization(
     #     pre_train_policy, {
     #         'hidden_size': (5, 8),
@@ -167,7 +167,7 @@ if __name__ == '__main__':
     # Agent_BO.maximize()
     # print(Agent_BO.max)
     for i in range(50):
-        pre_train_policy(hidden_size=128, learning_rate=0.001103128653571744)
+        pre_train_policy(hidden_size=32, learning_rate=0.1)
 
 
 

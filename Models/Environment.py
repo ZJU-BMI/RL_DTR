@@ -92,9 +92,9 @@ def train_environment(hidden_size, learning_rate, l2_regularization):
     batch_size = 64
     epochs = 30
 
-    hidden_size = 2**(int(hidden_size))
-    learning_rate = 10 ** learning_rate
-    l2_regularization = 10 ** l2_regularization
+    # hidden_size = 2**(int(hidden_size))
+    # learning_rate = 10 ** learning_rate
+    # l2_regularization = 10 ** l2_regularization
 
     print('feature_size---{}---previous_visit---{}----'
           'predicted_visit---{}---hidden_size---{}---'
@@ -171,44 +171,44 @@ def train_environment(hidden_size, learning_rate, l2_regularization):
                               mse_loss, mse_loss_test,
                               mae_loss_test,
                               np.mean(r_value_all)))
-                # if mse_loss_test < 0.0076:
-                #     construct_environment.save_weights('environment_3_7_39_9_15.h5')
+                if mse_loss_test < 0.0063:
+                    construct_environment.save_weights('environment_3_7_39_9_17.h5')
 
     tf.compat.v1.reset_default_graph()
-    # return mse_loss_test, mae_loss_test, np.mean(r_value_all)
-    return -1*mse_loss_test
+    return mse_loss_test, mae_loss_test, np.mean(r_value_all)
+    # return -1*mse_loss_test
 
 
 if __name__ == '__main__':
     test_test('environment_s2s_simulate_保存参数_.txt')
-    Encode_Decode_Time_BO = BayesianOptimization(
-        train_environment, {
-            'hidden_size': (5, 8),
-            'learning_rate': (-5, -1),
-            'l2_regularization': (-5, -1),
-        }
-    )
-    Encode_Decode_Time_BO.maximize()
-    print(Encode_Decode_Time_BO.max)
+    # Encode_Decode_Time_BO = BayesianOptimization(
+    #     train_environment, {
+    #         'hidden_size': (5, 8),
+    #         'learning_rate': (-5, -1),
+    #         'l2_regularization': (-5, -1),
+    #     }
+    # )
+    # Encode_Decode_Time_BO.maximize()
+    # print(Encode_Decode_Time_BO.max)
 
-    # mse_all = []
-    # mae_all = []
-    # r_value_all = []
-    # for i in range(50):
-    #     mse, mae, r = train_environment(hidden_size=64,
-    #                                     learning_rate=0.0036370379238332626,
-    #                                     l2_regularization=6.0823681740674096e-05)
-    #     mse_all.append(mse)
-    #     mae_all.append(mae)
-    #     r_value_all.append(r)
-    #     print('epoch---{}--mse_ave---{}---mae_ave---r_value_ave---{}---mse_std---{}---mae_std---{}---r_value_std---{}'
-    #           .format(i,
-    #                   np.mean(mse_all),
-    #                   np.mean(mae_all),
-    #                   np.mean(r_value_all),
-    #                   np.std(mse_all),
-    #                   np.std(mae_all),
-    #                   np.std(r_value_all)))
+    mse_all = []
+    mae_all = []
+    r_value_all = []
+    for i in range(50):
+        mse, mae, r = train_environment(hidden_size=64,
+                                        learning_rate=0.0030966637954402444,
+                                        l2_regularization=1.0169106899497462e-05)
+        mse_all.append(mse)
+        mae_all.append(mae)
+        r_value_all.append(r)
+        print('epoch---{}--mse_ave---{}---mae_ave---r_value_ave---{}---mse_std---{}---mae_std---{}---r_value_std---{}'
+              .format(i,
+                      np.mean(mse_all),
+                      np.mean(mae_all),
+                      np.mean(r_value_all),
+                      np.std(mse_all),
+                      np.std(mae_all),
+                      np.std(r_value_all)))
 
 
 
