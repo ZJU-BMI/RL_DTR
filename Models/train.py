@@ -217,6 +217,9 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
             rewards_test = tf.zeros(shape=[batch_test, 0, 1])
             states_test = tf.zeros(shape=[batch_test, 0, feature_size])
             actions_test = tf.zeros(shape=[batch_test, 0, 1])
+            states_test_real = test_set[:, previous_visit:previous_visit+predicted_visit-1, 5:]
+            rewards_test_real = tf.reshape((test_set[:, previous_visit+1:previous_visit+predicted_visit, 1] - test_set[:, previous_visit+1:previous_visit+predicted_visit, 2]) * imbalance_1, [batch_test, -1, 1])
+            rewards_test_real = tf.cast(rewards_test_real, tf.float32)
 
             for step in range(predicted_visit):
                 initial_state_test_feature = test_set[:, step+previous_visit, 5:]
@@ -266,8 +269,16 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
                     actions_test = tf.concat((actions_test, tf.reshape(action_test_value, [batch_test, -1, 1])), axis=1)
 
             discont_rewards_test = agent.discont_reward(states=states_test, rewards=rewards_test)
-            print('epoch {}    train_total_reward {}  train_rewards_real {} train_loss {}    test_total_reward {}'
-                  .format(train_set.epoch_completed, np.mean(discont_rewards), np.mean(discont_rewards_real), np.mean(loss), np.mean(discont_rewards_test)))
+            discont_rewards_test_real = agent.discont_reward(states=states_test_real, rewards=rewards_test_real)
+            discriminator_prob_fake_test = discriminator([states_test, actions_test, rewards_test])
+            print('epoch {}    train_total_reward {}  train_rewards_real {}  test_total_reward {}  test_rewards_real {}'
+                  'train_loss {}  dis_real --{}---dis_train---{}---dis_test---{}'
+                  .format(train_set.epoch_completed, np.mean(discont_rewards), np.mean(discont_rewards_real),
+                          np.mean(discont_rewards_test), np.mean(discont_rewards_test_real),
+                          np.mean(loss), np.mean(discriminator_prob_real), np.mean(discriminator_prob_fake),
+                          np.mean(discriminator_prob_fake_test)
+                          ))
+
     tf.compat.v1.reset_default_graph()
     return np.mean(discont_rewards_test)
 
