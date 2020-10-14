@@ -91,8 +91,8 @@ def pre_train_reward_net(hidden_size, learning_rate, l2_regularization):
                 batch_test = test_set.shape[0]
                 pred_rewards_test = tf.zeros(shape=[batch_test, 0, output_size])
 
-                rewards_test_only_output = test_set[:, previous_visit+1:previous_visit+predicted_visit, 1] - test_set[:, previous_visit+1:previous_visit+predicted_visit, 2]
-                rewards_test_bnp = test_set[:, previous_visit+1:previous_visit+predicted_visit, 4]
+                rewards_test_only_output = test_set[:, previous_visit+1:previous_visit+predicted_visit, 1] - test_set[:, previous_visit+1:previous_visit+predicted_visit, 2]  # 净出量
+                rewards_test_bnp = test_set[:, previous_visit+1:previous_visit+predicted_visit, 4] # BNP
                 rewards_label_test = tf.concat((tf.reshape(rewards_test_only_output, [batch_test, -1, 1]), tf.reshape(rewards_test_bnp, [batch_test, -1, 1])), axis=2)
 
                 for step in range(predicted_visit-1):

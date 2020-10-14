@@ -4,7 +4,9 @@ from Reward import *
 from utilis import *
 from bayes_opt import BayesianOptimization
 from basic_rl import Agent, Discriminator
+from death_model import DeathModel
 import os
+import random
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
 for gpu in gpus:
@@ -93,11 +95,9 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
     previous_visit = 3
     predicted_visit = 7
 
-    hidden_size = 2 ** int(hidden_size)
-    learning_rate = 10 ** learning_rate
-    l2_regularization = 10 ** l2_regularization
-    # imbalance_1 = 10 ** int(imbalance_1)
-    # imbalance_2 = 10 ** int(imbalance_2)
+    # hidden_size = 2 ** int(hidden_size)
+    # learning_rate = 10 ** learning_rate
+    # l2_regularization = 10 ** l2_regularization
     gamma = 0.99
     imbalance_1 = 10
     imbalance_2 = 20
@@ -108,8 +108,9 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
                    4.25, 4.5, 5, 5.25, 5.5, 5.75, 6, 6.25, 6.5, 7,
                    7.5, 7.75, 8, 8.25, 8.5, 9, 9.625, 10, 11, 13.5,
                    14.5, 15, 21, 22.25, 25.625]
-    print('hidden_size---{}---gamma---{}---imbalance_1---{}---imbalance_2----{}---learning_rate---{}'
-          .format(hidden_size, gamma, imbalance_1, imbalance_2, learning_rate))
+    print('hidden_size---{}---gamma---{}---imbalance_1---{}---imbalance_2----{}-'
+          '--learning_rate---{}  l2_regularization---{}'
+          .format(hidden_size, gamma, imbalance_1, imbalance_2, learning_rate, l2_regularization))
 
     construct_environment = ReconstructEnvir(hidden_size=64,
                                              feature_dims=35,
@@ -125,6 +126,10 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
     agent.act(tf.ones(shape=[3, feature_size]))
     agent.model.load_weights('policy_net_9_18.h5')
 
+    death_model = DeathModel(hidden_size=32)
+    death_model(tf.ones(shape=[3, 1, 35]))
+    death_model.load_weights('death_model_0_10_10_12.h5')
+
     discriminator = Discriminator(hidden_size=hidden_size, feature_dims=feature_size, predicted_visit=predicted_visit)
     cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
     discriminator_optimizer = tf.keras.optimizers.RMSprop(learning_rate=learning_rate)
@@ -135,46 +140,45 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
         input_x_train = input_x_train.astype(np.float32)
         batch = input_x_train.shape[0]
         rewards = tf.zeros(shape=[batch, 0, 1])
-        states = tf.zeros(shape=[batch, 0, feature_size])
-        actions = tf.zeros(shape=[batch, 0, 1])
-        actions_index = tf.zeros(shape=[batch, 0, 1])
-
+        states = tf.zeros(shape=[batch, 0, feature_size]) # 保存已经生成的state(从previous visit时刻开始)
+        actions = tf.zeros(shape=[batch, 0, 1])  # 保存已经选择的action(从previous visit开始)
+        actions_index = tf.zeros(shape=[batch, 0, 1])  # 保存已经获得的reward(从previous visit开始)
+        # 从previous_visit到最后一步的state
         real_states = input_x_train[:, previous_visit:previous_visit+predicted_visit-1, 5:]
+        # 从previous_visit到最后一步的action
         real_actions = input_x_train[:, previous_visit:previous_visit+predicted_visit-1, 0].reshape(batch, -1, 1)
         real_rewards = tf.zeros(shape=[batch, 0, 1])
 
         for step in range(predicted_visit-1):
-            # next_state_real = input_x_train[:, step+previous_visit+1, 5:]  # 35个变量
-            real_reward = (input_x_train[:, step+previous_visit+1, 1] - input_x_train[:, step+previous_visit+1, 2])*imbalance_1  # 净出量
-            # initital_state_real = input_x_train[:, step+previous_visit, 5:]
-
+            real_reward = (input_x_train[:, step+previous_visit+1, 1] -
+                           input_x_train[:, step+previous_visit+1, 2])*imbalance_1  # 净出量
             if step == 0:
                 real_rewards = tf.concat((real_rewards, tf.reshape(real_reward, [batch, -1, 1])), axis=1)
                 initial_state = input_x_train[:, step + previous_visit, 5:]
                 state_to_now_feature = input_x_train[:, :step + previous_visit, 5:]
                 state_to_now_action = input_x_train[:, :step+previous_visit, 0]
-                state_to_now_ = tf.concat((state_to_now_feature, tf.reshape(state_to_now_action, [batch, -1, 1])), axis=2)  # state和action进行拼接
+                state_to_now_ = tf.concat((state_to_now_feature, tf.reshape(state_to_now_action, [batch, -1, 1])), axis=2)  # 到现在时刻为止的所有state和action进行拼接
                 action_index = tf.reshape(agent.act(initial_state), [batch, -1])  # 选择一个action
                 actions_index = tf.concat((actions_index, tf.reshape(action_index, [batch, -1, 1])), axis=1)
                 action_value = np.zeros_like(action_index)
                 for i in range(tf.shape(action_index)[0]):
                     for j in range(tf.shape(action_index)[1]):
                         action_value[i, j] = action_list[action_index[i, j]]
-                state_action = tf.concat((initial_state.reshape(batch, 1, -1), tf.reshape(action_value, [batch, -1, 1])), axis=2)  # 当前时刻的state action
+                state_action = tf.concat((initial_state.reshape(batch, 1, -1), tf.reshape(action_value, [batch, -1, 1])), axis=2)  # 当前时刻选择的state action
                 state_to_now = tf.concat((state_to_now_, state_action), axis=1)
                 next_state = construct_environment(state_to_now)
 
                 states = tf.concat((states, initial_state.reshape(batch, -1, feature_size)), axis=1)
                 actions = tf.concat((actions, tf.reshape(action_value, [batch, -1, 1])), axis=1)
 
-                reward = reward_net([initial_state, action_value])[:, 0] * imbalance_1  # 新状态的出入量差值
+                reward = reward_net([initial_state, action_value])[:, 0] * imbalance_1  # 新状态的净出量
                 rewards = tf.concat((rewards, tf.reshape(reward, [batch, -1, 1])), axis=1)
 
             else:
                 initial_state = initial_state
                 state_to_now_feature = input_x_train[:, :previous_visit, 5:]
                 state_to_now_action = input_x_train[:, :previous_visit, 0]
-                state_to_now_ = tf.concat((state_to_now_feature, tf.reshape(state_to_now_action, [batch, -1, 1])), axis=2)  # 最开始的初识状态
+                state_to_now_ = tf.concat((state_to_now_feature, tf.reshape(state_to_now_action, [batch, -1, 1])), axis=2)  # 最开始到previous visit的state action
                 state = next_state
                 action_index = agent.act(state)
                 actions_index = tf.concat((actions_index, tf.reshape(action_index, [batch, -1, 1])), axis=1)
@@ -199,7 +203,7 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
         discont_rewards = agent.discont_reward(states=states, rewards=rewards)
         discont_rewards_real = agent.discont_reward(states=real_states, rewards=real_rewards)
 
-        # TODO: 写鉴别器的更新部分及loss函数
+        # 鉴别器的更新部分及loss函数
         discriminator_prob_fake = discriminator([states, actions, rewards])
         discriminator_prob_real = discriminator([real_states, real_actions, real_rewards])
         d_real_pre_loss = cross_entropy(tf.ones_like(discriminator_prob_real), discriminator_prob_real)
@@ -212,19 +216,21 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
             discriminator_optimizer.apply_gradients(zip(gradient_disc, discriminator.trainable_variables))
 
         if train_set.epoch_completed % 1 == 0 and train_set.epoch_completed not in logged:
+            discriminator.load_weights('discriminator_net_10_13_death_that_10.h5')
+            agent.model.load_weights('agent_trained_net_10_13_death_than_10.h5')
             logged.add(train_set.epoch_completed)
             batch_test = test_set.shape[0]
             rewards_test = tf.zeros(shape=[batch_test, 0, 1])
             states_test = tf.zeros(shape=[batch_test, 0, feature_size])
             actions_test = tf.zeros(shape=[batch_test, 0, 1])
+            estimated_death_test = tf.zeros(shape=[batch_test, 0])
+
             states_test_real = test_set[:, previous_visit:previous_visit+predicted_visit-1, 5:]
             rewards_test_real = tf.reshape((test_set[:, previous_visit+1:previous_visit+predicted_visit, 1] - test_set[:, previous_visit+1:previous_visit+predicted_visit, 2]) * imbalance_1, [batch_test, -1, 1])
             rewards_test_real = tf.cast(rewards_test_real, tf.float32)
 
             for step in range(predicted_visit):
                 initial_state_test_feature = test_set[:, step+previous_visit, 5:]
-                # initial_state_test_action = test_set[:, step+previous_visit, 0]
-                # initial_state_test = tf.concat((initial_state_test_feature, tf.reshape(initial_state_test_action, [batch_test, -1, 1])), axis=2)  # 当前时刻的state action
 
                 state_to_now_test_feature = test_set[:, :previous_visit, 5:]
                 state_to_now_test_action = test_set[:, :previous_visit, 0]
@@ -239,14 +245,17 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
                             action_test_value[i, j] = action_list[action_test_index[i, j]]
                     state_action_test = tf.concat((tf.reshape(state_test, [batch_test, -1, feature_size]), tf.reshape(action_test_value, [batch_test, -1, 1])), axis=2)  # 当前时刻选择的state action 拼接
 
-                    state_to_now_test = tf.concat((state_to_now_test_, state_action_test), axis=1)
+                    state_to_now_test = tf.concat((state_to_now_test_, state_action_test), axis=1) #从0时刻到现在时刻的state action
                     next_state_test = construct_environment(state_to_now_test)
-                    # reward_test = tf.nn.softsign(next_state_test[:, 0] - next_state_test[:, 1]) * imbalance_1
                     reward_test = reward_net([state_test, action_test_value])[:, 0] * imbalance_1
 
                     rewards_test = tf.concat((rewards_test, tf.reshape(reward_test, [batch_test, 1, 1])), axis=1)
                     states_test = tf.concat((states_test, tf.reshape(state_test, [batch_test, -1, feature_size])), axis=1)
                     actions_test = tf.concat((actions_test, tf.reshape(action_test_value, [batch_test, -1, 1])), axis=1)
+
+                    death_model_input = tf.concat((state_to_now_test[:, :, :-1], tf.reshape(next_state_test, [batch_test, -1, feature_size])), axis=1)
+                    death_test = death_model(death_model_input)
+                    estimated_death_test = tf.concat((estimated_death_test, death_test), axis=1)
 
                 else:
                     state_test = next_state_test   # 当前时刻的state
@@ -260,7 +269,6 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
 
                     state_to_now_test = tf.concat((state_to_now_test_, state_to_now_test__, state_action_test), axis=1)
                     next_state_test = construct_environment(state_to_now_test)
-                    # reward_test = tf.nn.softsign(next_state_test[:, 0] - next_state_test[:, 1]) * imbalance_1
                     reward_test = (reward_net([state_test, action_test_value])[:, 0]) * imbalance_1
                     # if step == predicted_visit-1:
                     #     reward_test += (initial_state_test[:, 3] - next_state_test[:, 3]) * imbalance_2
@@ -268,33 +276,47 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
                     states_test = tf.concat((states_test, tf.reshape(state_test, [batch_test, -1, feature_size])), axis=1)
                     actions_test = tf.concat((actions_test, tf.reshape(action_test_value, [batch_test, -1, 1])), axis=1)
 
+                    death_model_input = tf.concat((state_to_now_test[:, :, :-1], tf.reshape(next_state_test, [batch_test, -1, feature_size])), axis=1)
+                    death_test = death_model(death_model_input)
+                    estimated_death_test = tf.concat((estimated_death_test, death_test), axis=1)
+            pro_death_test = np.zeros_like(estimated_death_test)
+            for patient in range(batch_test):
+                for visit in range(predicted_visit):
+                    if estimated_death_test[patient, visit] >= 0.048136085:
+                        pro_death_test[patient, visit] = 1
+
             discont_rewards_test = agent.discont_reward(states=states_test, rewards=rewards_test)
             discont_rewards_test_real = agent.discont_reward(states=states_test_real, rewards=rewards_test_real)
             discriminator_prob_fake_test = discriminator([states_test, actions_test, rewards_test])
             print('epoch {}    train_total_reward {}  train_rewards_real {}  test_total_reward {}  test_rewards_real {}'
-                  'train_loss {}  dis_real --{}---dis_train---{}---dis_test---{}'
+                  'train_loss {}  dis_real --{}---dis_train---{}---dis_test---{}---test_death_rate---{}'
                   .format(train_set.epoch_completed, np.mean(discont_rewards), np.mean(discont_rewards_real),
                           np.mean(discont_rewards_test), np.mean(discont_rewards_test_real),
                           np.mean(loss), np.mean(discriminator_prob_real), np.mean(discriminator_prob_fake),
-                          np.mean(discriminator_prob_fake_test)
+                          np.mean(discriminator_prob_fake_test),
+                          np.sum(pro_death_test)
                           ))
-
+            np.save('death_pre.npy', pro_death_test)
+            np.save('discont_rewards_test.npy', discont_rewards_test)
     tf.compat.v1.reset_default_graph()
     return np.mean(discont_rewards_test)
 
 
 if __name__ == '__main__':
-    test_test('9_14_训练agent_3_7_train_修改action数值.txt')
-    Agent_BO = BayesianOptimization(
-        train_batch, {
-            'hidden_size': (5, 8),
-            'learning_rate': (-5, -1),
-            'l2_regularization': (-6, -1),
-        }
-    )
-    Agent_BO.maximize()
-    print(Agent_BO.max)
-    # train_batch(hidden_size=64, learning_rate=0.1, l2_regularization=1e-6)
+    test_test('10_13_训练agent_3_7_保存死亡参数.txt')
+    # Agent_BO = BayesianOptimization(
+    #     train_batch, {
+    #         'hidden_size': (5, 8),
+    #         'learning_rate': (-5, -1),
+    #         'l2_regularization': (-6, -1),
+    #     }
+    # )
+    # Agent_BO.maximize()
+    # print(Agent_BO.max)
+    for i in range(100):
+        discount_reward = train_batch(hidden_size=2 ** 8,
+                                      learning_rate=10 ** (-1.0),
+                                      l2_regularization=10 ** (-6.0))
 
 
 
