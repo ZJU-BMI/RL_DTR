@@ -33,7 +33,7 @@ def train_batch_random_policy(hidden_size, learning_rate, l2_regularization):
     # imbalance_1 = 10 ** int(imbalance_1)
     # imbalance_2 = 10 ** int(imbalance_2)
     gamma = 0.99
-    imbalance_1 = 1
+    imbalance_1 = 10
     imbalance_2 = 20
     action_list = [0, 0.0357142873108387, 0.0625, 0.071428571, 0.125, 0.1875, 0.25, 0.2857142984867096, 0.3125, 0.321428571,
                    0.375, 0.4375, 0.446428571, 0.5, 0.5625, 0.625, 0.6875, 0.75, 0.875, 1,
@@ -149,12 +149,14 @@ def train_batch_random_policy(hidden_size, learning_rate, l2_regularization):
                           np.mean(discont_rewards),
                           np.mean(discont_rewards_real),
                           np.sum(pro_death)))
-
+        np.save('death_random_policy.npy', pro_death)
+        np.save('death_random_discont_reward.npy', discont_rewards)
+        np.save('doctor_discont_reward.npy', discont_rewards_real)
     return np.mean(discont_rewards)
 
 
 if __name__ == '__main__':
-    test_test('10_13_随机action_return.txt')
+    test_test('10_15_随机action_return_保存return.txt')
     Agent_BO = BayesianOptimization(
         train_batch_random_policy, {
             'hidden_size': (5, 8),
