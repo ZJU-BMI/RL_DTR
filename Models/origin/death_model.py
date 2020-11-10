@@ -1,11 +1,8 @@
-import tensorflow as tf
 import numpy as np
-from data import DataSet
+from origin.data import DataSet
 from tensorflow_core.python.keras.models import Model
-import os
 from utilis import *
-from bayes_opt import BayesianOptimization
-from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, precision_score, recall_score, roc_curve
+from sklearn.metrics import accuracy_score, roc_auc_score, roc_curve
 from imblearn.over_sampling import SMOTE
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"

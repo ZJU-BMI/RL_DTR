@@ -1,10 +1,8 @@
-from data import *
-from Environment import *
-from Reward import *
+from origin.Environment import *
+from origin.Reward import *
 from utilis import *
 from bayes_opt import BayesianOptimization
-from basic_rl import Agent, Discriminator
-from death_model import DeathModel
+from origin.death_model import DeathModel
 import os
 import random
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"

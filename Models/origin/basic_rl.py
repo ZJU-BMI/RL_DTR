@@ -1,15 +1,8 @@
-import tensorflow as tf
-import numpy as np
-from Environment import *
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-from data import *
+from origin.data import *
 from utilis import *
 from tensorflow_core.python.keras.models import Model
-from bayes_opt import BayesianOptimization
 import os
-from discrinmintor import Discriminator
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
 for gpu in gpus:

@@ -1,10 +1,8 @@
-import tensorflow as tf
 import numpy as np
-import os
+import tensorflow as tf
 from tensorflow_core.python.keras.models import Model
 from utilis import *
-from data import DataSet
-from bayes_opt import BayesianOptimization
+from origin.data import DataSet
 from scipy import stats
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"

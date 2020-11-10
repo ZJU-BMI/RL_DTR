@@ -1,10 +1,7 @@
-import tensorflow as tf
 from tensorflow_core.python.keras.models import Model
-import os
-import numpy as np
-from data import *
+from origin.data import *
 from utilis import *
-from bayes_opt import BayesianOptimization
+
 gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
 for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True)

@@ -1,12 +1,11 @@
-from data import *
-from Environment import *
-from Reward import *
+from origin.Environment import *
+from origin.Reward import *
 from utilis import *
-from bayes_opt import BayesianOptimization
-from basic_rl import Agent, Discriminator
-from death_model import DeathModel
+from origin.basic_rl import Agent
+from origin.discrinmintor import Discriminator
+from origin.death_model import DeathModel
 import os
-import random
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
 for gpu in gpus:
@@ -130,6 +129,10 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
     death_model(tf.ones(shape=[3, 1, 35]))
     death_model.load_weights('death_model_0_10_10_12.h5')
 
+    discriminator = Discriminator(hidden_size=hidden_size, feature_dims=feature_size, predicted_visit=predicted_visit)
+    cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+    discriminator_optimizer = tf.keras.optimizers.RMSprop(learning_rate=learning_rate)
+
     logged = set()
     while train_set.epoch_completed < epochs:
         input_x_train = train_set.next_batch(batch_size=batch_size)
@@ -199,8 +202,21 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
         discont_rewards = agent.discont_reward(states=states, rewards=rewards)
         discont_rewards_real = agent.discont_reward(states=real_states, rewards=real_rewards)
 
+        # 鉴别器的更新部分及loss函数
+        discriminator_prob_fake = discriminator([states, actions, rewards])
+        discriminator_prob_real = discriminator([real_states, real_actions, real_rewards])
+        d_real_pre_loss = cross_entropy(tf.ones_like(discriminator_prob_real), discriminator_prob_real)
+        d_fake_pre_loss = cross_entropy(tf.zeros_like(discriminator_prob_fake), discriminator_prob_fake)
+        d_loss = d_real_pre_loss + d_fake_pre_loss
+        with tf.GradientTape() as dis_tape:
+            for weight in discriminator.trainable_variables:
+                d_loss += tf.keras.regularizers.l2(l2_regularization)(weight)
+            gradient_disc = dis_tape.gradient(d_loss, discriminator.trainable_variables)
+            discriminator_optimizer.apply_gradients(zip(gradient_disc, discriminator.trainable_variables))
+
         if train_set.epoch_completed % 1 == 0 and train_set.epoch_completed not in logged:
-            agent.model.load_weights('policy_gradient_net.h5')
+            discriminator.load_weights('discriminator_net_10_13_death_that_10.h5')
+            agent.model.load_weights('agent_trained_net_10_13_death_than_10.h5')
             logged.add(train_set.epoch_completed)
             batch_test = test_set.shape[0]
             rewards_test = tf.zeros(shape=[batch_test, 0, 1])
@@ -270,27 +286,23 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
 
             discont_rewards_test = agent.discont_reward(states=states_test, rewards=rewards_test)
             discont_rewards_test_real = agent.discont_reward(states=states_test_real, rewards=rewards_test_real)
+            discriminator_prob_fake_test = discriminator([states_test, actions_test, rewards_test])
             print('epoch {}    train_total_reward {}  train_rewards_real {}  test_total_reward {}  test_rewards_real {}'
-                  'train_loss {}  --test_death_rate---{}'
+                  'train_loss {}  dis_real --{}---dis_train---{}---dis_test---{}---test_death_rate---{}'
                   .format(train_set.epoch_completed, np.mean(discont_rewards), np.mean(discont_rewards_real),
                           np.mean(discont_rewards_test), np.mean(discont_rewards_test_real),
-                          np.mean(loss),
+                          np.mean(loss), np.mean(discriminator_prob_real), np.mean(discriminator_prob_fake),
+                          np.mean(discriminator_prob_fake_test),
                           np.sum(pro_death_test)
                           ))
-            np.save('death_pre_policy_gradient.npy', pro_death_test)
-            np.save('discont_rewards_test_policy_gradient.npy', discont_rewards_test)
-            # if np.mean(discont_rewards_test) < 3 and train_set.epoch_completed > 20:
-            #     break
-
-            # if np.mean(discont_rewards_test) > 4 and np.sum(pro_death_test) > 30:
-            #     print('开始保存模型！')
-            #     agent.model.save_weights('policy_gradient_net.h5')
+            np.save('death_pre.npy', pro_death_test)
+            np.save('discont_rewards_test.npy', discont_rewards_test)
     tf.compat.v1.reset_default_graph()
     return np.mean(discont_rewards_test)
 
 
 if __name__ == '__main__':
-    test_test('10_13_训练agent_3_7_pp.txt')
+    test_test('10_13_训练agent_3_7_保存死亡参数.txt')
     # Agent_BO = BayesianOptimization(
     #     train_batch, {
     #         'hidden_size': (5, 8),
@@ -301,9 +313,9 @@ if __name__ == '__main__':
     # Agent_BO.maximize()
     # print(Agent_BO.max)
     for i in range(100):
-        discount_reward = train_batch(hidden_size=128,
-                                      learning_rate=0.09525829073800425,
-                                      l2_regularization=10 ** (-5.992370919158627))
+        discount_reward = train_batch(hidden_size=2 ** 8,
+                                      learning_rate=10 ** (-1.0),
+                                      l2_regularization=10 ** (-6.0))
 
 
 
