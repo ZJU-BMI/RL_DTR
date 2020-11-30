@@ -153,7 +153,7 @@ def train_random_policy():
 
 
 if __name__ == '__main__':
-    test_test('11_9_random_policy_保存数据.txt')
+    test_test('11_10_random_policy_保存数据.txt')
     train_random_policy()
 
 

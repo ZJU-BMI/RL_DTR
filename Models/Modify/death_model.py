@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow_core.python.keras.models import Model
 from utilis import *
-from sklearn.metrics import accuracy_score, roc_auc_score, roc_curve
+from sklearn.metrics import accuracy_score, roc_auc_score, roc_curve, f1_score
 from imblearn.over_sampling import SMOTE
 from origin.data import DataSet
 from environment import Encode
@@ -38,21 +38,21 @@ def imbalance_preprocess(feature, label):
                                      label.reshape([-1, 1]))
     x_size = int(x_res.shape[0]/feature.shape[1]) * feature.shape[1]
     feature_new = x_res[0:x_size, :].reshape(-1, feature.shape[1], feature.shape[2])
-    label_new = y_res[0:x_size].reshape(-1, feature.shape[1])
+    label_new = y_res[0:x_size].reshape(-1, feature.shape[1], 1)
     return feature_new, label_new
 
 
 def pre_train_death_model(hidden_size, learning_rate, l2_regularization):
-    # hidden_size = 2 ** int(hidden_size)
-    # learning_rate = 10 ** learning_rate
-    # l2_regularization = 10 ** l2_regularization
+    hidden_size = 2 ** int(hidden_size)
+    learning_rate = 10 ** learning_rate
+    l2_regularization = 10 ** l2_regularization
     print('hidden_size---{}---learning_rate---{}---l2_regularization---{}'
           .format(hidden_size, learning_rate, l2_regularization))
 
     train_set = np.load('..\\..\\..\\RL_DTR\\Resource\\preprocess\\train_PLA.npy')[:, :, 1:]
     train_set_label = np.load('..\\..\\..\\RL_DTR\\Resource\\preprocess\\train_PLA_label.npy')
     train_set_label = train_set_label.reshape([train_set_label.shape[0], train_set_label.shape[1], -1])
-    train_set = np.concatenate((train_set[:, :, 5:], train_set_label), axis=2) # 将标签和特征存到一起
+    train_set = np.concatenate((train_set[:, :, 5:], train_set_label), axis=2)  # 将标签和特征存到一起
 
     test_set = np.load('..\\..\\..\\RL_DTR\\Resource\\preprocess\\test_PLA.npy')[:, :, 1:]
     test_set_label = np.load('..\\..\\..\\RL_DTR\\Resource\\preprocess\\test_PLA_label.npy')
@@ -87,8 +87,9 @@ def pre_train_death_model(hidden_size, learning_rate, l2_regularization):
                 features = input_x_features[:, :previous_visit+step, :]
                 state = encode_net(features)
                 states = tf.concat((states, tf.reshape(state, [batch, -1, 128])), axis=1)
-            predicted_labels = death_model(states)
-            loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(y_true=input_x_labels, y_pred=predicted_labels))
+            states_res, label_res = imbalance_preprocess(states.numpy(), input_x_labels)
+            predicted_labels = death_model(states_res)
+            loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(y_true=label_res, y_pred=predicted_labels))
             variables = [var for var in death_model.trainable_variables]
             for weight in death_model.trainable_variables:
                 loss += tf.keras.regularizers.l2(l2_regularization)(weight)
@@ -98,7 +99,7 @@ def pre_train_death_model(hidden_size, learning_rate, l2_regularization):
 
             if train_set.epoch_completed % 1 == 0 and train_set.epoch_completed not in logged:
                 logged.add(train_set.epoch_completed)
-                death_model.load_weights('death_model_11_3.h5')
+                # death_model.load_weights('death_model_11_3.h5')
 
                 test_labels = test_set[:, previous_visit:, -1].reshape(batch_test, -1, 1)
                 test_states = tf.zeros(shape=[batch_test, 0, 128])
@@ -112,31 +113,33 @@ def pre_train_death_model(hidden_size, learning_rate, l2_regularization):
                 auc = roc_auc_score(test_labels.reshape([-1, ]), test_predicted_labels.numpy().reshape([-1, ]))
                 fpr, tpr, thread = roc_curve(test_labels.reshape([-1, ]), test_predicted_labels.numpy().reshape([-1,]))
                 threshold = thread[np.argmax(tpr-fpr)]
-                y_pre_label = (test_predicted_labels.numpy().reshape([-1,]) >= threshold) * 1
+                y_pre_label = (test_predicted_labels.numpy().reshape([-1, ]) >= threshold) * 1
                 # print(max(y_pre_label))
                 acc = accuracy_score(test_labels.reshape([-1, ]), y_pre_label)
+                f1 = f1_score(test_labels.reshape([-1, ]), y_pre_label)
                 print(threshold)  # 0.4072313
 
-                # if test_loss < 0.70 and (auc > 0.70 and acc >= 0.765):
-                #     death_model.save_weights('death_model_11_3.h5')
+                print('epoch---{}---train_loss--{}----test_loss---{}--auc---{}---acc---{}- f1---{}'.format(
+                    train_set.epoch_completed, loss, test_loss, auc, acc, f1))
 
-                print('epoch---{}---train_loss--{}----test_loss---{}--auc---{}---acc---{}-'.format(
-                    train_set.epoch_completed, loss, test_loss, auc, acc))
+                if test_loss < 0.70 and (auc > 0.81 and acc >= 0.825):
+                    death_model.save_weights('death_model_11_16.h5')
+                    print('模型保存成功！')
     tf.compat.v1.reset_default_graph()
     return auc
 
 
 if __name__ == '__main__':
     # test_test('death_model_11_3_train_test_set_保存.txt')
-    test_test('打印门限.txt')
-    # Encode_Decode_Time_BO = BayesianOptimization(
-    #     pre_train_death_model, {
-    #         'hidden_size': (5, 8),
-    #         'learning_rate': (-5, 0),
-    #         'l2_regularization': (-5, 0),
-    #     }
-    # )
-    # Encode_Decode_Time_BO.maximize()
-    # print(Encode_Decode_Time_BO.max)
-    for i in range(50):
-        auc = pre_train_death_model(hidden_size=32, learning_rate=0.008458542958160842, l2_regularization=1e-5)
+    test_test('11_16_death_model_重新训练_v2_test_set.txt')
+    Encode_Decode_Time_BO = BayesianOptimization(
+        pre_train_death_model, {
+            'hidden_size': (5, 8),
+            'learning_rate': (-5, 0),
+            'l2_regularization': (-5, 0),
+        }
+    )
+    Encode_Decode_Time_BO.maximize()
+    print(Encode_Decode_Time_BO.max)
+    # for i in range(50):
+    #     auc = pre_train_death_model(hidden_size=64, learning_rate=1e-5, l2_regularization=1e-5)

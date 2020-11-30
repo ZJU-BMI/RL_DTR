@@ -97,9 +97,9 @@ def pre_train_autoencoder(hidden_size, learning_rate, l2_regularization):
     previous_visit = 3
     predicted_visit = 7
 
-    # hidden_size = 2 ** int(hidden_size)
-    # learning_rate = 10 ** learning_rate
-    # l2_regularization = 10 ** l2_regularization
+    hidden_size = 2 ** int(hidden_size)
+    learning_rate = 10 ** learning_rate
+    l2_regularization = 10 ** l2_regularization
 
     print('hidden_size---{}---learning_rate---{}---l2_regularization---{}'
           .format(hidden_size, learning_rate, l2_regularization))
@@ -118,7 +118,9 @@ def pre_train_autoencoder(hidden_size, learning_rate, l2_regularization):
             encode_save = tf.zeros(shape=[batch, 0, hidden_size])
             for i in range(predicted_visit):
                 features = input_x_train[:, :previous_visit+i, 5:]
-                feature_encode = encode_net(features)
+                action_0 = tf.zeros(shape=[batch, 1, 1])
+                actions = tf.concat((action_0, input_x_train[:, :predicted_visit+i-1, 0]), axis=1)
+                feature_encode = encode_net([features, actions])
                 encode_save = tf.concat((encode_save, tf.reshape(feature_encode, [batch, -1, hidden_size])), axis=1)
                 feature_decode = decode_net(encode_save)
                 reconstruct_x = tf.concat((reconstruct_x, tf.reshape(feature_decode, [batch, -1, feature_size])),  axis=1)

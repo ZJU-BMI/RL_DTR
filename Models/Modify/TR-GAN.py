@@ -58,9 +58,9 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
     train_set = np.load('..\\..\\..\\RL_DTR\\Resource\\preprocess\\train_PLA.npy')[:, :, 1:]  # 去除当前天数这个变量
     test_set = np.load('..\\..\\..\\RL_DTR\\Resource\\preprocess\\test_PLA.npy')[:, :, 1:]
 
-    hidden_size = 2 ** int(hidden_size)
-    learning_rate = 10 ** learning_rate
-    l2_regularization = 10 ** l2_regularization
+    # hidden_size = 2 ** int(hidden_size)
+    # learning_rate = 10 ** learning_rate
+    # l2_regularization = 10 ** l2_regularization
     lambda_imbalance = 0.5
     print('hidden_size---{}---learning_rate---{}---l2_regularization---{}---lambda_imbalance---{}'
           .format(hidden_size, learning_rate, l2_regularization, lambda_imbalance))
@@ -232,10 +232,10 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
         offline_value = discount_reward(offline_rewards_labels, gamma, lambda_imbalance, tf.ones_like(discriminator_probs_offline)*0.5)
 
         if train_set.epoch_completed % 1 == 0 and train_set.epoch_completed not in logged:
-            # agent.model.load_weights('11_9_save_models\\TR_GAN\\v2\\policy_net_11_9_v2_200tf.Tensor(12.753129, shape=(), dtype=float32).h5')
-            # discriminator.load_weights('11_9_save_models\\TR_GAN\\v2\\discriminator_11_9_v2_200tf.Tensor(12.753129, shape=(), dtype=float32).h5')
-            # environment_net.load_weights('11_9_save_models\\TR_GAN\\v2\\environment_11_9_v2_200tf.Tensor(12.753129, shape=(), dtype=float32).h5')
-            # reward_net.load_weights('11_9_save_models\\TR_GAN\\v2\\reward_11_9_v2_200tf.Tensor(12.753129, shape=(), dtype=float32).h5')
+            agent.model.load_weights('11_9_save_models\\11_12_save\\TR_GAN\\policy_net_11_12_v2_200tf.Tensor(5.162742, shape=(), dtype=float32).h5')
+            discriminator.load_weights('11_9_save_models\\11_12_save\\TR_GAN\\discriminator_11_12_v2_200tf.Tensor(5.162742, shape=(), dtype=float32).h5')
+            environment_net.load_weights('11_9_save_models\\11_12_save\\TR_GAN\\environment_11_12_v2_200tf.Tensor(5.162742, shape=(), dtype=float32).h5')
+            reward_net.load_weights('11_9_save_models\\11_12_save\\TR_GAN\\reward_11_12_v2_200tf.Tensor(5.162742, shape=(), dtype=float32).h5')
 
             logged.add(train_set.epoch_completed)
             batch_test = test_set.shape[0]
@@ -309,28 +309,28 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
                           tf.reduce_mean(dis_prob_test_online),
                           tf.reduce_mean(dis_prob_test_offline),
                           np.sum(death_estimated_online_test)))
-            # np.save('v2_11_9_test_online_value.npy', test_online_value)
-            #
-            # np.save('v2_11_9_states_TR_GAN.npy', states_test_online)
-            # np.save('v2_11_9_reward_TR_GAN.npy', rewards_test_online)
-            # np.save('v2_11_9_actions_TR_GAN.npy', actions_test_online)
-            # np.save('v2_11_9_death_TR_GAN.npy', death_estimated_online_test)
-            #
-            # np.save('v2_11_9_test_onlie_representation_TR_GAN.npy', test_online_representation)
-            # np.save('v2_11_9_test_offline_representation_TR_GAN.npy', test_offline_representation)
+            np.save('11_12_test_online_value.npy', test_online_value)
 
-            # np.save('states_offline.npy', states_test_offline)
-            # np.save('reward_offline.npy', rewards_test_offline)
-            # np.save('actions_offline.npy', actions_test_offline)
-            # np.save('death_offline.npy', death_estimated_offline_test)
+            np.save('11_12_states_TR_GAN.npy', states_test_online)
+            np.save('11_12_reward_TR_GAN.npy', rewards_test_online)
+            np.save('11_12_actions_TR_GAN.npy', actions_test_online)
+            np.save('11_12_death_TR_GAN.npy', death_estimated_online_test)
 
-            # if tf.reduce_mean(test_online_value) >= 12.62 and np.abs(tf.reduce_mean(dis_prob_test_online) - 0.5) < 0.1 and train_set.epoch_completed > 130:
+            np.save('11_12_test_online_representation_TR_GAN.npy', test_online_representation)
+            np.save('11_12_test_offline_representation_TR_GAN.npy', test_offline_representation)
+
+            np.save('states_offline.npy', states_test_offline)
+            np.save('reward_offline.npy', rewards_test_offline)
+            np.save('actions_offline.npy', actions_test_offline)
+            np.save('death_offline.npy', death_estimated_offline_test)
+
+            # if tf.reduce_mean(test_online_value) >= 5.16 and np.abs(tf.reduce_mean(dis_prob_test_online) - 0.5) < 0.1 and train_set.epoch_completed > 100:
             #     i = train_set.epoch_completed
-            #     j = tf.reduce_mean(test_online_value)
-            #     agent.model.save_weights('policy_net_11_9_v2_' + str(i) + str(j) + '.h5')
-            #     environment_net.save_weights('environment_11_9_v2_' + str(i)+str(j) + '.h5')
-            #     reward_net.save_weights('reward_11_9_v2_' + str(i) + str(j)+'.h5')
-            #     discriminator.save_weights('discriminator_11_9_v2_' + str(i) + str(j) + '.h5')
+            #     j = tf.reduce_mean(test_online_value.numpy())
+            #     agent.model.save_weights('policy_net_11_12_v2_' + str(i) + str(j) + '.h5')
+            #     environment_net.save_weights('environment_11_12_v2_' + str(i)+str(j) + '.h5')
+            #     reward_net.save_weights('reward_11_12_v2_' + str(i) + str(j)+'.h5')
+            #     discriminator.save_weights('discriminator_11_12_v2_' + str(i) + str(j) + '.h5')
             #     print('保存成功！')
 
     tf.compat.v1.reset_default_graph()
@@ -338,18 +338,18 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
 
 
 if __name__ == '__main__':
-    test_test('TR_GAN__11_10_修改loss函数.txt')
-    TR_GAN = BayesianOptimization(
-        train_batch, {
-            'hidden_size': (5, 7),
-            'learning_rate': (-6, -1),
-            'l2_regularization': (-6, -1),
-        }
-    )
-    TR_GAN.maximize()
-    print(TR_GAN.max)
-    # for i in range(50):
-    #     test_online_value = train_batch(hidden_size=128, learning_rate=0.1, l2_regularization=0.1)
+    # test_test('TR_GAN__11_10_修改loss函数_保存参数.txt')
+    # TR_GAN = BayesianOptimization(
+    #     train_batch, {
+    #         'hidden_size': (5, 7),
+    #         'learning_rate': (-6, -1),
+    #         'l2_regularization': (-6, -1),
+    #     }
+    # )
+    # TR_GAN.maximize()
+    # print(TR_GAN.max)
+    for i in range(50):
+        test_online_value = train_batch(hidden_size=64, learning_rate=0.03812478264603631, l2_regularization=0.019004112944910844)
 
 
 

@@ -58,9 +58,9 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
     train_set = np.load('..\\..\\..\\RL_DTR\\Resource\\preprocess\\train_PLA.npy')[:, :, 1:]
     test_set = np.load('..\\..\\..\\RL_DTR\\Resource\\preprocess\\test_PLA.npy')[:, :, 1:]
 
-    hidden_size = 2 ** int(hidden_size)
-    learning_rate = 10 ** learning_rate
-    l2_regularization = 10 ** l2_regularization
+    # hidden_size = 2 ** int(hidden_size)
+    # learning_rate = 10 ** learning_rate
+    # l2_regularization = 10 ** l2_regularization
     lambda_imbalance = 0.5
     print('hidden_size  {}  learning_rate  {}  l2_regularization  {}  lambda_imbalance  {}'
           .format(hidden_size, learning_rate, l2_regularization, lambda_imbalance))
@@ -214,9 +214,9 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
         if train_set.epoch_completed % 1 == 0 and train_set.epoch_completed not in logged:
             logged.add(train_set.epoch_completed)
 
-            # agent.model.load_weights('11_9_save_models\\policy_gradient\\11_9_policy_gradient_compare200_12.484636.h5')
-            # reward_net.load_weights('11_9_save_models\\policy_gradient\\11_9_reward_compare200_12.484636.h5')
-            # environment_net.load_weights('11_9_save_models\\policy_gradient\\11_9_environment_compare200_12.484636.h5')
+            agent.model.load_weights('11_9_save_models\\11_12_save\\policy_gradient\\11_12_policy_gradient_compare200_5.1092086.h5')
+            reward_net.load_weights('11_9_save_models\\11_12_save\\policy_gradient\\11_12_reward_compare200_5.1092086.h5')
+            environment_net.load_weights('11_9_save_models\\11_12_save\\policy_gradient\\11_12_environment_compare200_5.1092086.h5')
 
             batch_test = test_set.shape[0]
             rewards_test_online = tf.zeros(shape=[batch_test, 0, 1])
@@ -290,26 +290,26 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
                           tf.reduce_mean(offline_value),
                           tf.reduce_mean(test_online_value),
                           tf.reduce_mean(test_offline_value)))
-            #
-            # np.save('11_9_test_onlie_value_policy_gradient.npy', test_online_value)
-            #
-            # np.save('11_9_states_policy_gradient.npy', states_test_online)
-            # np.save('11_9_reward_policy_gradient.npy', rewards_test_online)
-            # np.save('11_9_actions_policy_gradient.npy', actions_test_online)
-            # np.save('11_9_death_policy_gradient.npy', death_estimated_online_test)
-            #
-            # np.save('11_9_test_online_representation_policy_gradient.npy', test_online_representation)
-            # np.save('11_9_test_offline_representation_policy_gradient.npy', test_offline_representation)
 
-            # if tf.reduce_mean(test_online_value) > 12.3 and train_set.epoch_completed > 100:
+            np.save('11_12_test_online_value_policy_gradient.npy', test_online_value)
+
+            np.save('11_12_states_policy_gradient.npy', states_test_online)
+            np.save('11_12_reward_policy_gradient.npy', rewards_test_online)
+            np.save('11_12_actions_policy_gradient.npy', actions_test_online)
+            np.save('11_12_death_policy_gradient.npy', death_estimated_online_test)
+
+            np.save('11_12_test_online_representation_policy_gradient.npy', test_online_representation)
+            np.save('11_12_test_offline_representation_policy_gradient.npy', test_offline_representation)
+
+            # if tf.reduce_mean(test_online_value) > 5 and train_set.epoch_completed > 100:
             #     i = train_set.epoch_completed
             #     j = np.mean(test_online_value.numpy())
-            #     agent.model.save_weights('11_9_policy_gradient_compare' + str(i) + '_' + str(j) + '.h5')
-            #     reward_net.save_weights('11_9_reward_compare' + str(i) + '_' + str(j) + '.h5')
-            #     environment_net.save_weights('11_9_environment_compare' + str(i) + '_' + str(j) + '.h5')
+            #     agent.model.save_weights('11_12_policy_gradient_compare' + str(i) + '_' + str(j) + '.h5')
+            #     reward_net.save_weights('11_12_reward_compare' + str(i) + '_' + str(j) + '.h5')
+            #     environment_net.save_weights('11_12_environment_compare' + str(i) + '_' + str(j) + '.h5')
             #     print('{}次迭代保存成功！'.format(i))
             #
-            # if train_set.epoch_completed > 140 and tf.reduce_mean(test_online_value) < 12:
+            # if train_set.epoch_completed > 100 and tf.reduce_mean(test_online_value) < 5:
             #     break
 
     tf.compat.v1.reset_default_graph()
@@ -317,19 +317,18 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
 
 
 if __name__ == '__main__':
-    test_test('PG_train_11_10_修改loss函数.txt')
-    PG = BayesianOptimization(
-        train_batch, {
-            'hidden_size': (5, 8),
-            'learning_rate': (-6, -1),
-            'l2_regularization': (-6, -1),
-        }
-    )
-    PG.maximize()
-    print(PG.max)
-    # for i in range(50):
-    #     test_online_value = train_batch(hidden_size=32, learning_rate=0.1, l2_regularization=0.0017796045909055304)
-
+    # test_test('PG_train_11_10_修改loss函数——保存参数debug.txt')
+    # PG = BayesianOptimization(
+    #     train_batch, {
+    #         'hidden_size': (5, 8),
+    #         'learning_rate': (-6, -1),
+    #         'l2_regularization': (-6, -1),
+    #     }
+    # )
+    # PG.maximize()
+    # print(PG.max)
+    for i in range(50):
+        test_online_value = train_batch(hidden_size=64, learning_rate=0.1, l2_regularization=1e-6)
 
 
 
