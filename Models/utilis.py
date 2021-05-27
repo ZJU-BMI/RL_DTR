@@ -10,7 +10,6 @@ import nibabel as nib
 import skimage.io as io
 import numpy as np
 import imageio
-from nibabel import nifti1
 import pandas as pd
 from nibabel.viewers import OrthoSlicer3D
 

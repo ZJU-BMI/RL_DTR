@@ -50,7 +50,7 @@ def discount_reward(rewards, gamma, lambda_imbalance, dis_probs):
     discount_reward = tf.reverse(discount_reward, axis=[1])
     for i in range(tf.shape(rewards_current)[1]):
         prob = tf.reshape(dis_probs[:, i], [batch, -1, 1])
-        return_value = tf.concat((return_value, tf.reshape(discount_reward[:, i, :], [batch, -1, 1]) * (1.0 - tf.abs(prob-0.5))), axis=1)
+        return_value = tf.concat((return_value, tf.reshape(discount_reward[:, i, :], [batch, -1, 1]) * prob), axis=1)
     return return_value
 
 
@@ -77,20 +77,20 @@ def train_random_policy():
 
     # 初始化所有的modules,并加载预训练模型
     encode_net = Encode(hidden_size=128)
-    encode_net(tf.zeros(shape=[batch_size, 4, feature_size]))
-    encode_net.load_weights('encode_net_10_27.h5')
+    encode_net([tf.zeros(shape=[batch_size, 4, feature_size]), tf.zeros(shape=[batch_size, 4, 1])])
+    encode_net.load_weights('encode_net_11_30.h5')
 
-    environment_net = Environment(hidden_size=32)
+    environment_net = Environment(hidden_size=128)
     environment_net([tf.zeros(shape=[batch_size, 128]), tf.zeros(shape=[batch_size, 1])])
-    environment_net.load_weights('environment_net_10_27.h5')
+    environment_net.load_weights('environment_net_11_30.h5')
 
-    reward_net = Reward(hidden_size=128)
+    reward_net = Reward(hidden_size=32)
     reward_net([tf.zeros(shape=[batch_size, 128]), tf.zeros(shape=[batch_size, 1])])
-    reward_net.load_weights('reward_net_10_27.h5')
+    reward_net.load_weights('reward_net_11_30.h5')
 
-    death_model = DeathModel(hidden_size=32)
+    death_model = DeathModel(hidden_size=256)
     death_model(tf.zeros(shape=[batch_size, 4, 128]))
-    death_model.load_weights('death_model_11_3.h5')
+    death_model.load_weights('death_model_11_30.h5')
 
     discriminator = Discriminator(hidden_size=128)
 
@@ -108,7 +108,10 @@ def train_random_policy():
         for step in range(predicted_visit-1):
             if step == 0:
                 features = test_set[:, :previous_visit+step, 5:]
-                state = encode_net(features)
+                actions_ = tf.zeros(shape=[batch_size, 1, 1], dtype=tf.float64)
+                actions = tf.reshape(test_set[:, :previous_visit+step-1, 0], [batch_size, -1, 1])
+                actions = tf.concat((actions_, actions), axis=1)
+                state = encode_net([features, actions])
             else:
                 state = next_state
 
@@ -133,7 +136,7 @@ def train_random_policy():
         death_estimated_online = np.zeros_like(death_probs_online)
         for patient in range(batch_size):
             for visit in range(predicted_visit-1):
-                if death_probs_online[patient, visit, :] > 0.4072313:
+                if death_probs_online[patient, visit, :] > 0.49651924:
                     death_estimated_online[patient, visit, :] = 1
 
         discont_rewards = discount_reward(rewards_online, 0.99, 0.5, discriminator_probs_online)
@@ -143,17 +146,17 @@ def train_random_policy():
         epoch += 1
 
         if epoch == 199:
-            np.save('11_9_states_random_policy.npy', states_online)
-            np.save('11_9_death_random_policy.npy', death_estimated_online)
-            np.save('11_9_rewards_random_policy.npy', rewards_online)
-            np.save('11_9_actions_random_policy.npy', actions_online)
-            np.save('11_9_discount_reward_random_policy.npy', discont_rewards)
+            np.save('11_30 最终版\\11_30_states_random_policy.npy', states_online)
+            np.save('11_30 最终版\\11_30_death_random_policy.npy', death_estimated_online)
+            np.save('11_30 最终版\\11_30_rewards_random_policy.npy', rewards_online)
+            np.save('11_30 最终版\\11_30_actions_random_policy.npy', actions_online)
+            np.save('11_30 最终版\\11_30_discount_reward_random_policy.npy', discont_rewards)
 
     tf.compat.v1.reset_default_graph()
 
 
 if __name__ == '__main__':
-    test_test('11_10_random_policy_保存数据.txt')
+    test_test('1_28_random_policy_保存数据_HF.txt')
     train_random_policy()
 
 

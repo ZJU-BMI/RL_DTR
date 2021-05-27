@@ -1,5 +1,5 @@
-from reward import *
-from origin.data import *
+from reward_1 import *
+from data import *
 from utilis import *
 from tensorflow_core.python.keras.models import Model
 import os
@@ -89,15 +89,18 @@ class Agent(object):
 
 
 def pre_train_policy(hidden_size, learning_rate, l2_regularization):
-    # hidden_size = 2 ** int(hidden_size)
-    # learning_rate = 10 ** learning_rate
-    # l2_regularization = 10 ** l2_regularization
+    hidden_size = 2 ** int(hidden_size)
+    learning_rate = 10 ** learning_rate
+    l2_regularization = 10 ** l2_regularization
     print('hidden_size---{}---learning_rate---{}---l2_regularization---{}'
           .format(hidden_size, learning_rate, l2_regularization))
 
-    actor_size = 65
-    train_set = np.load('..\\..\\..\\RL_DTR\\Resource\\preprocess\\train_PLA.npy')[:, :, 1:]
-    test_set = np.load('..\\..\\..\\RL_DTR\\Resource\\preprocess\\validate_PLA.npy')[:, :, 1:]
+    actor_size = 25
+    # train_set = np.load('..\\..\\..\\RL_DTR\\Resource\\preprocess\\train_PLA.npy')[:, :, 1:]
+    # test_set = np.load('..\\..\\..\\RL_DTR\\Resource\\preprocess\\validate_PLA.npy')[:, :, 1:]
+    train_set = np.load('..\\..\\..\\RL_DTR\\Resource\\preprocess\\mimic_train.npy')
+    test_set = np.load('..\\..\\..\\RL_DTR\\Resource\\preprocess\\mimic_validate.npy')
+
     train_set.astype(np.float32)
     test_set.astype(np.float32)
 
@@ -106,41 +109,42 @@ def pre_train_policy(hidden_size, learning_rate, l2_regularization):
     batch_size = 64
     logged = set()
     previous_visit = 3
-    predicted_visit = 7
+    predicted_visit = 10
 
     policy_net = PolicyGradientNN(hidden_size=hidden_size, actor_size=actor_size)
     optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-    encode_net = Encode(hidden_size=128)
-    encode_net([tf.zeros(shape=[batch_size, 4, 35]), tf.zeros(shape=[batch_size, 4, 1])])
-    action_list = [0, 0.0357142873108387, 0.0625, 0.071428571, 0.125, 0.1875, 0.25, 0.2857142984867096, 0.3125,
-                   0.321428571,
-                   0.375, 0.4375, 0.446428571, 0.5, 0.5625, 0.625, 0.6875, 0.75, 0.875, 1,
-                   1.125, 1.25, 1.375, 1.5, 1.55, 1.625, 1.75, 1.875, 2, 2.125,
-                   2.25, 2.5, 2.75, 3, 3.125, 3.25, 3.375, 3.5, 3.75, 4,
-                   4.25, 4.5, 5, 5.25, 5.5, 5.75, 6, 6.25, 6.5, 7,
-                   7.5, 7.75, 8, 8.25, 8.5, 9, 9.625, 10, 11, 13.5,
-                   14.5, 15, 21, 22.25, 25.625]
+    encode_net = Encode(hidden_size=256)
+    encode_net([tf.zeros(shape=[batch_size, 4, 45]), tf.zeros(shape=[batch_size, 4, 2])])
+    iv_list = [0, 33, 102, 330, 1153]
+    vas_list = [0, 0.045, 0.15, 0.32, 1.24]
 
     while train_set.epoch_completed < epochs:
         with tf.GradientTape() as tape:
-            encode_net.load_weights('encode_net_11_30.h5')
+            encode_net.load_weights('encode_net_12_7_mimic.h5')
             input_x_train = train_set.next_batch(batch_size=batch_size)
             input_x_train.astype(np.float32)
-            action = input_x_train[:, previous_visit:previous_visit+predicted_visit, 0]
-            action_labels = np.zeros_like(action)
+            action_labels = input_x_train[:, previous_visit:previous_visit+predicted_visit, 0]  # 直接获取所有的label
+
             batch = input_x_train.shape[0]
-            # 将真实的剂量转换为类别
-            for patient in range(batch):
-                for visit in range(predicted_visit):
-                    action_labels[patient, visit] = action_list.index(action[patient, visit])
             action_probs = tf.zeros(shape=[batch, 0, actor_size])
             # 将原始x转换为hidden representation
             for step in range(predicted_visit):
-                features = input_x_train[:, :step+previous_visit, 5:]
-                actions_ = tf.zeros(shape=[batch, 1, 1], dtype=tf.float64)
+                features = input_x_train[:, :step+previous_visit, 4:]
+                actions_ = tf.zeros(shape=[batch, 1, 1], dtype=tf.float64)  # 将最开始的action当作0
+
                 actions = tf.reshape(input_x_train[:, :step+previous_visit-1, 0], [batch, -1, 1])
                 actions = tf.concat((actions_, actions), axis=1)
-                state = encode_net([features, actions])
+                actions_index = actions.numpy()  # 获得之前数据的action_label_index,将其转换为真实的剂量，得到state
+                actions_values = np.zeros(shape=[batch, step+previous_visit, 2])
+                for patient in range(batch):
+                    for visit in range(step+previous_visit):
+                        action_index = actions_index[patient, visit, 0]
+                        iv_index = int(action_index /5)
+                        vas_index = int(action_index % 5)
+                        actions_values[patient, visit, 0] = iv_list[iv_index]
+                        actions_values[patient, visit, 1] = vas_list[vas_index]
+
+                state = encode_net([features, actions_values])
                 action_prob = policy_net(state)
                 action_probs = tf.concat((action_probs, tf.reshape(action_prob, [batch, -1, actor_size])), axis=1)
 
@@ -154,20 +158,25 @@ def pre_train_policy(hidden_size, learning_rate, l2_regularization):
 
                 batch_test = test_set.shape[0]
                 predicted_probs = tf.zeros(shape=[batch_test, 0, actor_size])
-                predicted_actions = test_set[:, previous_visit:previous_visit+predicted_visit, 0]
-                predicted_actions_labels = np.zeros_like(predicted_actions)
-
-                # 将患者真实用药剂量转换为对应的类别
-                for patient in range(predicted_actions.shape[0]):
-                    for visit in range(predicted_actions.shape[1]):
-                        predicted_actions_labels[patient, visit] = action_list.index(predicted_actions[patient, visit])
+                predicted_actions_labels = test_set[:, previous_visit:previous_visit+predicted_visit, 0] # 测试集上的actinn_label_index
 
                 for step in range(predicted_visit):
-                    features_test = test_set[:, :previous_visit+step, 5:]
+                    features_test = test_set[:, :previous_visit+step, 4:]
                     actions_test_ = tf.zeros(shape=[batch_test, 1, 1], dtype=tf.float64)
                     actions_test = tf.reshape(test_set[:, :previous_visit+step-1, 0], [batch_test, -1, 1])
                     actions_test = tf.concat((actions_test_, actions_test), axis=1)
-                    state_test = encode_net([features_test, actions_test])
+                    actions_test_index = actions_test.numpy()
+
+                    actions_test_values = np.zeros(shape=[batch_test, previous_visit+step, 2]) # 将index转换成values 输入到encode中
+                    for patient in range(batch_test):
+                        for visit in range(previous_visit+step):
+                            action_index = actions_test_index[patient, visit, 0]
+                            iv_index = int(action_index / 5)
+                            vas_index = int(action_index % 5)
+                            actions_test_values[patient, visit, 0] = iv_list[iv_index]
+                            actions_test_values[patient, visit, 1] = vas_list[vas_index]
+
+                    state_test = encode_net([features_test, actions_test_values])
                     action_prob_test = policy_net(state_test)
                     predicted_probs = tf.concat((predicted_probs, tf.reshape(action_prob_test, [batch_test, -1, actor_size])), axis=1)
 
@@ -175,27 +184,27 @@ def pre_train_policy(hidden_size, learning_rate, l2_regularization):
                 print('epoch---{}----train_loss---{}---test_loss---{}'
                       .format(train_set.epoch_completed, loss, predicted_loss))
 
-                if predicted_loss < 1.69:
-                    policy_net.save_weights('policy_net_11_30.h5')
+                # if predicted_loss < 1.69:
+                #     policy_net.save_weights('policy_net_11_30.h5')
 
     tf.compat.v1.reset_default_graph()
     return -1 * predicted_loss
 
 
 if __name__ == '__main__':
-    test_test('11_30_policy_gradient_保存参数.txt')
-    # agent_bo = BayesianOptimization(
-    #     pre_train_policy, {
-    #         'hidden_size': (5, 8),
-    #         'learning_rate': (-6, 0),
-    #         'l2_regularization': (-6, 0),
-    #     }
-    # )
-    # agent_bo.maximize()
-    # print(agent_bo.max)
+    test_test('12_19_agent_训练——mimic.txt')
+    agent_bo = BayesianOptimization(
+        pre_train_policy, {
+            'hidden_size': (5, 8),
+            'learning_rate': (-6, 0),
+            'l2_regularization': (-6, 0),
+        }
+    )
+    agent_bo.maximize()
+    print(agent_bo.max)
 
-    for i in range(50):
-        loss = pre_train_policy(hidden_size=128, learning_rate=9.475285020707197e-05, l2_regularization=5.478971706578164e-05)
+    # for i in range(50):
+    #     loss = pre_train_policy(hidden_size=128, learning_rate=9.475285020707197e-05, l2_regularization=5.478971706578164e-05)
 
 
 

@@ -28,9 +28,10 @@ class Discriminator(Model):
         hidden_representation = tf.zeros(shape=[tf.shape(states)[0], 0, self.hidden_size])
         for step in range(tf.shape(states)[1]):
             state = states[:, step, :]
-            reward = rewards[:, step, :]
-            action = actions[:, step, :]
-            features = tf.concat((state, tf.reshape(reward, [-1, 1]), tf.reshape(action, [-1, 1])), axis=1)
+            # reward = rewards[:, step, :]
+            # action = actions[:, step, :]
+            # features = tf.concat((state, tf.reshape(reward, [-1, 1]), tf.reshape(action, [-1, 1])), axis=1)
+            features = state
             hidden_1 = self.dense1(features)
             hidden_2 = self.dense2(hidden_1)
             hidden_3 = self.dense3(hidden_2)

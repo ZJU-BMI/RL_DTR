@@ -50,7 +50,7 @@ def discount_reward(rewards, gamma, lambda_imbalance, dis_probs):
     discount_reward = tf.reverse(discount_reward, axis=[1])
     for i in range(tf.shape(rewards_current)[1]):
         prob = tf.reshape(dis_probs[:, i], [batch, -1, 1])
-        return_value = tf.concat((return_value, tf.reshape(discount_reward[:, i, :], [batch, -1, 1]) * (1.0 - tf.abs(prob-0.5))), axis=1)
+        return_value = tf.concat((return_value, tf.reshape(discount_reward[:, i, :], [batch, -1, 1]) * prob), axis=1)
     return return_value
 
 
@@ -58,9 +58,9 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
     train_set = np.load('..\\..\\..\\RL_DTR\\Resource\\preprocess\\train_PLA.npy')[:, :, 1:]
     test_set = np.load('..\\..\\..\\RL_DTR\\Resource\\preprocess\\test_PLA.npy')[:, :, 1:]
 
-    # hidden_size = 2 ** int(hidden_size)
-    # learning_rate = 10 ** learning_rate
-    # l2_regularization = 10 ** l2_regularization
+    hidden_size = 2 ** int(hidden_size)
+    learning_rate = 10 ** learning_rate
+    l2_regularization = 10 ** l2_regularization
     lambda_imbalance = 0.5
     print('hidden_size  {}  learning_rate  {}  l2_regularization  {}  lambda_imbalance  {}'
           .format(hidden_size, learning_rate, l2_regularization, lambda_imbalance))
@@ -86,16 +86,16 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
 
     # 初始化所有的modules,并加载预训练模型
     encode_net = Encode(hidden_size=128)
-    encode_net(tf.zeros(shape=[batch_size, 4, feature_size]))
-    encode_net.load_weights('encode_net_10_27.h5')
+    encode_net([tf.zeros(shape=[batch_size, 4, feature_size]), tf.zeros(shape=[batch_size, 4, 1])])
+    encode_net.load_weights('encode_net_11_30.h5')
 
-    environment_net = Environment(hidden_size=32)
+    environment_net = Environment(hidden_size=128)
     environment_net([tf.zeros(shape=[batch_size, 128]), tf.zeros(shape=[batch_size, 1])])
-    environment_net.load_weights('environment_net_10_27.h5')
+    environment_net.load_weights('environment_net_11_30.h5')
 
-    reward_net = Reward(hidden_size=128)
+    reward_net = Reward(hidden_size=32)
     reward_net([tf.zeros(shape=[batch_size, 128]), tf.zeros(shape=[batch_size, 1])])
-    reward_net.load_weights('reward_net_10_27.h5')
+    reward_net.load_weights('reward_net_11_30.h5')
 
     agent = Agent(actor_size=actor_size, hidden_size=128, gamma=gamma, learning_rate=learning_rate,
                   lambda_imbalance=lambda_imbalance)
@@ -104,9 +104,9 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
 
     discriminator = Discriminator(hidden_size=hidden_size)
 
-    death_model = DeathModel(hidden_size=32)
+    death_model = DeathModel(hidden_size=256)
     death_model(tf.zeros(shape=[batch_size, 4, 128]))
-    death_model.load_weights('death_model_11_3.h5')
+    death_model.load_weights('death_model_11_30.h5')
 
     agent_optimizer = tf.keras.optimizers.RMSprop(learning_rate=learning_rate)
 
@@ -116,6 +116,7 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
         with tf.GradientTape() as tape, tf.GradientTape() as agent_tape:
             input_x_train = train_set.next_batch(batch_size=batch_size)
             input_x_train.astype(np.float32)
+            batch = input_x_train.shape[0]
 
             rewards = tf.zeros(shape=[batch_size, 0, 1])
             states = tf.zeros(shape=[batch_size, 0, 128])
@@ -133,15 +134,18 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
 
             # online数据
             for step in range(predicted_visit-1):
-                if step == 0 :
+                if step == 0:
                     features = input_x_train[:, :step+previous_visit, 5:]
-                    state = encode_net(features)
+                    actions_ = tf.zeros(shape=[batch, 1, 1], dtype=tf.float64)
+                    actions = tf.reshape(input_x_train[:, :previous_visit+step-1, 0], [batch, -1, 1])
+                    actions = tf.concat((actions_, actions), axis=1)
+                    state = encode_net([features, actions])
                 else:
                     state = next_state
                 states = tf.concat((states, tf.reshape(state, [batch_size, -1, 128])), axis=1)
                 action_index = agent.act(state)
                 actions_index = tf.concat((actions_index, tf.reshape(action_index, [batch_size, -1, 1])), axis=1)
-                action_value = np.zeros_like(action_index)
+                action_value = np.zeros_like(action_index, dtype=np.float64)
                 # 将选择的类别转换成真实数值
                 for i in range(tf.shape(action_value)[0]):
                     for j in range(tf.shape(action_value)[1]):
@@ -155,7 +159,10 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
             # offline 数据
             for step in range(predicted_visit-1):
                 features = input_x_train[:, :step+previous_visit, 5:]
-                state = encode_net(features)
+                actions_ = tf.zeros(shape=[batch, 1, 1], dtype=tf.float64)
+                actions = tf.reshape(input_x_train[:, :previous_visit + step - 1, 0], [batch, -1, 1])
+                actions = tf.concat((actions_, actions), axis=1)
+                state = encode_net([features, actions])
                 offline_states_labels = tf.concat((offline_states_labels, tf.reshape(state, [batch_size, -1, 128])), axis=1)
 
                 action_index = agent.act(state)
@@ -174,16 +181,16 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
                 offline_states = tf.concat((offline_states, tf.reshape(next_state, [batch_size, -1, 128])), axis=1)
 
             features = input_x_train[:, previous_visit:previous_visit+predicted_visit, 5:]
-            state = encode_net(features)
+            actions_ = tf.zeros(shape=[batch, 1, 1], dtype=tf.float64)
+            actions = tf.reshape(input_x_train[:, previous_visit:previous_visit+predicted_visit - 1, 0], [batch, -1, 1])
+            actions = tf.concat((actions_, actions), axis=1)
+            state = encode_net([features, actions])
             offline_states_labels = tf.concat((offline_states_labels, tf.reshape(state, [batch_size, -1, 128])), axis=1)
-
-            _, discriminator_probs_online = discriminator([states, rewards, actions])
-            _, discriminator_probs_offline = discriminator([offline_states_labels[:, :-1, :], offline_rewards_labels, offline_actions])
 
             loss = tf.zeros(shape=[batch_size, 1])
             for step in range(predicted_visit-1):
                 discont_reward = agent.discount_reward(rewards[:, step:, :])
-                agent_loss_online = agent.loss(discont_reward, actions_index[:, step:, :], states[:, step:, :], discriminator_probs_online[:, step:])
+                agent_loss_online = agent.loss(discont_reward, actions_index[:, step:, :], states[:, step:, :], tf.ones(shape=[batch, predicted_visit-1])*0.5)
                 loss += agent_loss_online
             # m_a的损失
             loss = tf.reduce_mean(loss)
@@ -208,15 +215,15 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
         agent_optimizer.apply_gradients(zip(grads, environment_and_reward_variables))
 
         # 计算价值函数
-        online_value = discount_reward(rewards, gamma, lambda_imbalance, discriminator_probs_online)
-        offline_value = discount_reward(offline_rewards_labels, gamma, lambda_imbalance, discriminator_probs_offline)
+        online_value = discount_reward(rewards, gamma, lambda_imbalance, tf.ones(shape=[batch, predicted_visit-1])*0.5)
+        offline_value = discount_reward(offline_rewards_labels, gamma, lambda_imbalance, tf.ones(shape=[batch, predicted_visit-1])*0.5)
 
         if train_set.epoch_completed % 1 == 0 and train_set.epoch_completed not in logged:
             logged.add(train_set.epoch_completed)
 
-            agent.model.load_weights('11_9_save_models\\11_12_save\\policy_gradient\\11_12_policy_gradient_compare200_5.1092086.h5')
-            reward_net.load_weights('11_9_save_models\\11_12_save\\policy_gradient\\11_12_reward_compare200_5.1092086.h5')
-            environment_net.load_weights('11_9_save_models\\11_12_save\\policy_gradient\\11_12_environment_compare200_5.1092086.h5')
+            # agent.model.load_weights('11_9_save_models\\11_12_save\\policy_gradient\\11_12_policy_gradient_compare200_5.1092086.h5')
+            # reward_net.load_weights('11_9_save_models\\11_12_save\\policy_gradient\\11_12_reward_compare200_5.1092086.h5')
+            # environment_net.load_weights('11_9_save_models\\11_12_save\\policy_gradient\\11_12_environment_compare200_5.1092086.h5')
 
             batch_test = test_set.shape[0]
             rewards_test_online = tf.zeros(shape=[batch_test, 0, 1])
@@ -236,13 +243,19 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
             # 获取真实的state标签
             for step in range(predicted_visit-1):
                 features = test_set[:, :previous_visit+step, 5:]
-                state = encode_net(features)
+                actions_ = tf.zeros(shape=[batch_test, 1, 1], dtype=tf.float64)
+                actions = tf.reshape(test_set[:, :previous_visit + step - 1, 0], [batch_test, -1, 1])
+                actions = tf.concat((actions_, actions), axis=1)
+                state = encode_net([features, actions])
                 states_test_offline = tf.concat((states_test_offline, tf.reshape(state, [batch_test, -1, 128])), axis=1)
 
             for step in range(predicted_visit-1):
                 if step == 0:
-                    features_test = test_set[:, :step+previous_visit, 5:]
-                    state_test = encode_net(features_test)
+                    features = test_set[:, :previous_visit + step, 5:]
+                    actions_ = tf.zeros(shape=[batch_test, 1, 1], dtype=tf.float64)
+                    actions = tf.reshape(test_set[:, :previous_visit + step - 1, 0], [batch_test, -1, 1])
+                    actions = tf.concat((actions_, actions), axis=1)
+                    state_test = encode_net([features, actions])
                 else:
                     state_test = next_state_test
                 states_test_online = tf.concat((states_test_online, tf.reshape(state_test, [batch_test, -1, 128])), axis=1)
@@ -261,11 +274,9 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
 
                 next_state_test = environment_net([state_test, action_value])
 
-            test_online_representation, discriminator_probs_online_test = discriminator([states_test_online, rewards_test_online, actions_test_online])
-            test_offline_representation, discriminator_probs_offline_test = discriminator([states_test_offline, rewards_test_offline, actions_test_offline])
-            test_online_value = discount_reward(rewards_test_online, gamma, lambda_imbalance, discriminator_probs_online_test)
+            test_online_value = discount_reward(rewards_test_online, gamma, lambda_imbalance, tf.ones(shape=[batch_test, predicted_visit-1])*0.5)
             rewards_test_offline = tf.cast(rewards_test_offline, tf.float32)
-            test_offline_value = discount_reward(rewards_test_offline, gamma, lambda_imbalance,  tf.ones_like(discriminator_probs_offline_test)*0.5)
+            test_offline_value = discount_reward(rewards_test_offline, gamma, lambda_imbalance,  tf.ones(shape=[batch_test, predicted_visit-1])*0.5)
 
             death_probs_online_test = death_model(states_test_online)
             death_estimated_online_test = np.zeros_like(death_probs_online_test)
@@ -275,9 +286,9 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
 
             for patient in range(batch_test):
                 for visit in range(predicted_visit-1):
-                    if death_probs_online_test[patient, visit, :] > 0.4072313:
+                    if death_probs_online_test[patient, visit, :] > 0.49651924:
                         death_estimated_online_test[patient, visit, :] = 1
-                    if death_probs_offline_test[patient, visit, :] > 0.4072313:
+                    if death_probs_offline_test[patient, visit, :] > 0.49651924:
                         death_estimated_offline_test[patient, visit, :] = 1
 
             print(np.sum(death_estimated_offline_test), np.sum(death_estimated_online_test))
@@ -291,15 +302,15 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
                           tf.reduce_mean(test_online_value),
                           tf.reduce_mean(test_offline_value)))
 
-            np.save('11_12_test_online_value_policy_gradient.npy', test_online_value)
-
-            np.save('11_12_states_policy_gradient.npy', states_test_online)
-            np.save('11_12_reward_policy_gradient.npy', rewards_test_online)
-            np.save('11_12_actions_policy_gradient.npy', actions_test_online)
-            np.save('11_12_death_policy_gradient.npy', death_estimated_online_test)
-
-            np.save('11_12_test_online_representation_policy_gradient.npy', test_online_representation)
-            np.save('11_12_test_offline_representation_policy_gradient.npy', test_offline_representation)
+            # np.save('11_12_test_online_value_policy_gradient.npy', test_online_value)
+            #
+            # np.save('11_12_states_policy_gradient.npy', states_test_online)
+            # np.save('11_12_reward_policy_gradient.npy', rewards_test_online)
+            # np.save('11_12_actions_policy_gradient.npy', actions_test_online)
+            # np.save('11_12_death_policy_gradient.npy', death_estimated_online_test)
+            #
+            # np.save('11_12_test_online_representation_policy_gradient.npy', test_online_representation)
+            # np.save('11_12_test_offline_representation_policy_gradient.npy', test_offline_representation)
 
             # if tf.reduce_mean(test_online_value) > 5 and train_set.epoch_completed > 100:
             #     i = train_set.epoch_completed
@@ -317,18 +328,18 @@ def train_batch(hidden_size, learning_rate, l2_regularization):
 
 
 if __name__ == '__main__':
-    # test_test('PG_train_11_10_修改loss函数——保存参数debug.txt')
-    # PG = BayesianOptimization(
-    #     train_batch, {
-    #         'hidden_size': (5, 8),
-    #         'learning_rate': (-6, -1),
-    #         'l2_regularization': (-6, -1),
-    #     }
-    # )
-    # PG.maximize()
-    # print(PG.max)
-    for i in range(50):
-        test_online_value = train_batch(hidden_size=64, learning_rate=0.1, l2_regularization=1e-6)
+    test_test('PG_train_11_30_训练.txt')
+    PG = BayesianOptimization(
+        train_batch, {
+            'hidden_size': (5, 8),
+            'learning_rate': (-6, -1),
+            'l2_regularization': (-6, -1),
+        }
+    )
+    PG.maximize()
+    print(PG.max)
+    # for i in range(50):
+    #     test_online_value = train_batch(hidden_size=64, learning_rate=0.1, l2_regularization=1e-6)
 
 
 
